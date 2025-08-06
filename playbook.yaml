@@ -12,6 +12,10 @@
     target_instance_filter: "sysdig-monitor"
 
   tasks:
+    - name: get running ansible env variables
+      set_fact:
+        ibmcloud_api_key: "{{ lookup('env', 'API_KEY') }}"
+        target_instance_filter: "sysdig-monitor"
     - name: Check if 'jq' command is available
       ansible.builtin.command: which jq
       register: jq_check

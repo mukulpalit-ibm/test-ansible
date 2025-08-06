@@ -80,7 +80,7 @@
             (.crn | type == "string" and (ascii_downcase | contains("logs-router"))) # Added filter for "logs-router" in CRN
         ) |
         "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
-      ')
+        ')
       register: found_log_instance_result
 
     - name: Display found IBM Cloud Log Routing tenants

@@ -21,11 +21,8 @@
       when: jq_check.rc != 0
 
     - name: Log in to IBM Cloud
-      # Use the 'shell' module for commands that involve piping or complex shell features.
-      # Redirect stdout/stderr to /dev/null to keep the output clean.
-      # 'no_log: true' prevents the API key from appearing in Ansible logs.
       ansible.builtin.shell: |
-        ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region >/dev/null 2>&1
+        ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region
       register: ibmcloud_login_result
       changed_when: false
       # Fail if the login command returns a non-zero exit code or specific error messages.
@@ -35,7 +32,6 @@
       environment:
         # Pass the API key as an environment variable to the shell command.
         API_KEY: "{{ ibmcloud_api_key }}"
-      no_log: true
 
     - name: Display IBM Cloud login success message
       ansible.builtin.debug:

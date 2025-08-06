@@ -58,45 +58,76 @@
         msg: "Logs Router API Endpoint URL: {{ logs_router_api_endpoint }}"
 
     - name: Search for IBM Cloud Log Routing tenants
-      ansible.builtin.uri:
-        url: "{{ logs_router_api_endpoint }}"
-        method: GET
-        headers:
-          Authorization: "{{ iam_token }}"
-          IBM-API-Version: "{{ api_version_date }}"
-        return_content: true # Get the response body
-        status_code: 200 # Expect a 200 OK response
-      register: api_response_raw
-      # Fail if the API call itself returns an error status code
-      failed_when: api_response_raw.status != 200
-
-    - name: Parse and filter API response for tenants
-      # Use 'jq' filter on the 'content' (JSON string) from the uri module
+      # Use the 'shell' module to execute the curl command and pipe its JSON output to 'jq',
+      # replicating the logic of the original shell script.
       ansible.builtin.shell: |
-        echo "$API_RESPONSE" | jq -r --arg region "$TARGET_REGION" '
-        .tenants[] | select(
-            (type == "object") and
-            ((.crn | split(":")[5]) | type == "string" and (ascii_downcase | contains($region | ascii_downcase))) and
-            (.crn | type == "string" and (ascii_downcase | contains("logs-router"))) # Added filter for "logs-router" in CRN
-        ) |
-        "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
-        ')
-      register: found_log_instance_result
-      environment:
-        API_RESPONSE: "{{ api_response_raw.content }}"
-        TARGET_REGION: "{{ region }}"
+        curl -s -X GET \
+          -H "Authorization: Bearer {{ iam_token }}" \
+          -H "IBM-API-Version: {{ api_version_date }}" \
+          "{{ logs_router_api_endpoint }}" | \
+        jq -r --arg region "{{ region }}" '
+            .tenants[] | select(
+                ((.crn | split(":")[5]) | ascii_downcase | contains($region | ascii_downcase))) and
+                (.crn | ascii_downcase | contains("logs-router")
+            ) |
+            "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
+        '
+      register: found_tenants_result
+      changed_when: false
+      failed_when: false # 'jq' will return an empty string if no match is found, not an error.
 
     - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:
         msg: |
-          Active IBM Cloud Logs Routing instance found:
-          {{ found_log_instance_result.stdout }}
-      when: found_log_instance_result.stdout | length > 0
+          Found IBM Cloud Log Routing tenants in region '{{ region }}':
+          {{ found_tenants_result.stdout }}
+      when: found_tenants_result.stdout | length > 0
 
     - name: Inform if no IBM Cloud Log Routing tenants were found
       ansible.builtin.debug:
         msg: "No log routing tenants found in region '{{ region }}'."
-      when: found_log_instance_result.stdout | length == 0
+      when: found_tenants_result.stdout | length == 0
+
+    # - name: Search for IBM Cloud Log Routing tenants
+    #   ansible.builtin.uri:
+    #     url: "{{ logs_router_api_endpoint }}"
+    #     method: GET
+    #     headers:
+    #       Authorization: "{{ iam_token }}"
+    #       IBM-API-Version: "{{ api_version_date }}"
+    #     return_content: true # Get the response body
+    #     status_code: 200 # Expect a 200 OK response
+    #   register: api_response_raw
+    #   # Fail if the API call itself returns an error status code
+    #   failed_when: api_response_raw.status != 200
+
+    # - name: Parse and filter API response for tenants
+    #   # Use 'jq' filter on the 'content' (JSON string) from the uri module
+    #   ansible.builtin.shell: |
+    #     echo "$API_RESPONSE" | jq -r --arg region "$TARGET_REGION" '
+    #     .tenants[] | select(
+    #         (type == "object") and
+    #         ((.crn | split(":")[5]) | type == "string" and (ascii_downcase | contains($region | ascii_downcase))) and
+    #         (.crn | type == "string" and (ascii_downcase | contains("logs-router"))) # Added filter for "logs-router" in CRN
+    #     ) |
+    #     "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
+    #     ')
+    #   register: found_log_instance_result
+    #   environment:
+    #     API_RESPONSE: "{{ api_response_raw.content }}"
+    #     TARGET_REGION: "{{ region }}"
+
+    # - name: Display found IBM Cloud Log Routing tenants
+    #   ansible.builtin.debug:
+    #     msg: |
+    #       Active IBM Cloud Logs Routing instance found:
+    #       {{ found_log_instance_result.stdout }}
+    #   when: found_log_instance_result.stdout | length > 0
+
+    # - name: Inform if no IBM Cloud Log Routing tenants were found
+    #   ansible.builtin.debug:
+    #     msg: "No log routing tenants found in region '{{ region }}'."
+    #   when: found_log_instance_result.stdout | length == 0
 
     - name: Log out of IBM Cloud
       ansible.builtin.shell: |

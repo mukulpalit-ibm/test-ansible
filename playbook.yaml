@@ -74,7 +74,7 @@
       # Use 'jq' filter on the 'content' (JSON string) from the uri module
       set_fact:
         found_tenants_formatted: |
-          {% set jmespath_query = "tenants[?(@.type == 'object' && (@.crn | split(':'))[5] == '%s' && (@.crn | lower | contains('logs-router')))]" | format(target_region.lower()) %}
+          {% set jmespath_query = "tenants[?(@.type == 'object' && (@.crn | split(':'))[5] == '%s' && (@.crn | lower | contains('logs-router')))]" | format(region.lower()) %}
           {% set filtered_tenants = api_response_raw.content | from_json | json_query(jmespath_query) %}
           {% set final_query = "[].{name: name, id: id, region: (@.crn | split(':'))[5], log_sink_crn: targets[0].log_sink_crn || 'N/A', crn: crn}" %}
           {{ filtered_tenants | json_query(final_query) }}

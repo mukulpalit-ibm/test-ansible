@@ -74,7 +74,7 @@
       ansible.builtin.debug:
         msg: "Response: {{ api_response_raw.content }}"
 
-        - name: Display found IBM Cloud Log Routing tenants
+    - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:
         msg: |
           Active IBM Cloud Logs Routing instance found:

@@ -4,13 +4,6 @@
   connection: local
   gather_facts: false # No need to gather facts for localhost operations
 
-  vars:
-    # Retrieve the IBM Cloud API Key from the environment variable.
-    # Ensure 'API_KEY' is set in your environment before running this playbook.
-    ibmcloud_api_key: "{{ lookup('env', 'API_KEY') }}"
-    # Define the part of the instance name/CRN to search for (e.g., "sysdig-monitor")
-    target_instance_filter: "sysdig-monitor"
-
   tasks:
     - name: get running ansible env variables
       set_fact:

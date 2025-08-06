@@ -1,5 +1,5 @@
 ---
-- name: Find IBM Cloud Monitoring Instance with Platform Metrics
+- name: Find IBM Cloud Log Routing Tenants by Region
   hosts: localhost
   connection: local
   gather_facts: false # No need to gather facts for localhost operations
@@ -8,69 +8,78 @@
     - name: get running ansible env variables
       set_fact:
         ibmcloud_api_key: "{{ lookup('env', 'API_KEY') }}"
-        target_instance_filter: "sysdig-monitor"
-    - name: Check if 'jq' command is available
-      ansible.builtin.command: which jq
-      register: jq_check
-      ignore_errors: true # Allow task to fail without stopping the playbook immediately
-      changed_when: false # This command does not change system state
+        region: "{{ lookup('env', 'region') }}"
+        target_instance_filter: "log-router"
+        api_version_date: "2025-08-06"
 
-    - name: Fail if 'jq' is not installed
-      ansible.builtin.fail:
-        msg: "Error: 'jq' is not installed. Please install 'jq' to run this playbook (e.g., sudo apt-get install jq)."
-      when: jq_check.rc != 0
-
-    - name: Log in to IBM Cloud
+    - name: Log in to IBM Cloud and get IAM token
+      # Use the 'shell' module to execute ibmcloud login and then get the IAM token.
+      # 'no_log: true' prevents sensitive data from appearing in Ansible logs.
       ansible.builtin.shell: |
-        ibmcloud login --apikey "{{ API_KEY }}" --no-region
-      register: ibmcloud_login_result
+        ibmcloud login --apikey "{{ API_KEY }}" --no-region >/dev/null 2>&1
+        ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
+      register: ibmcloud_auth_result
       changed_when: false
-      # Fail if the login command returns a non-zero exit code or specific error messages.
-      failed_when: ibmcloud_login_result.rc != 0 or
-                   'FAILED' in ibmcloud_login_result.stderr or
-                   'Error' in ibmcloud_login_result.stderr
+      failed_when: ibmcloud_auth_result.rc != 0 or
+                   'FAILED' in ibmcloud_auth_result.stderr or
+                   'Error' in ibmcloud_auth_result.stderr or
+                   ibmcloud_auth_result.stdout | length == 0
       environment:
-        # Pass the API key as an environment variable to the shell command.
-        API_KEY: "{{ ibmcloud_api_key }}"
+        API_KEY: "{{ ibmcloud_api_key }}" # Pass API_KEY to the shell environment
+
+    - name: Set IAM Token fact
+      ansible.builtin.set_fact:
+        iam_token: "{{ ibmcloud_auth_result.stdout }}"
+      when: ibmcloud_auth_result.rc == 0
 
     - name: Display IBM Cloud login success message
       ansible.builtin.debug:
         msg: "Authentication successful."
-      when: ibmcloud_login_result.rc == 0
+      when: ibmcloud_auth_result.rc == 0
 
-    - name: List IBM Cloud service instances and filter for Cloud Monitoring instance
-      # Execute the 'ibmcloud resource service-instances' command and pipe its JSON output to 'jq'.
-      # The 'jq' filter matches instances based on the specified criteria (sysdig-monitor, active, platform metrics enabled).
-      ansible.builtin.shell: |
-        ibmcloud resource service-instances --output JSON | \
-        jq -r '
-            .[] | select(
-                ((.id | test("{{ target_instance_filter }}"; "i")) or (.crn | test("{{ target_instance_filter }}"; "i"))) and
-                .state == "active" and
-                .parameters.default_receiver == false
-            ) |
-            "Instance Name: \(.name)\nInstance ID:   \(.guid)\nRegion:        \(.region_id)\n"
-        '
-      register: found_instance_result
-      changed_when: false
-      # 'failed_when: false' because 'jq' will return an empty string (not an error) if no match is found.
-      failed_when: false
+    - name: Construct Logs Router API Endpoint
+      ansible.builtin.set_fact:
+        logs_router_api_endpoint: "https://management.{{ region }}.logs-router.cloud.ibm.com/v1/tenants"
 
-    - name: Display found IBM Cloud Monitoring instances
+    - name: Search for IBM Cloud Log Routing tenants
+      ansible.builtin.uri:
+        url: "{{ logs_router_api_endpoint }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ iam_token }}"
+          IBM-API-Version: "{{ api_version_date }}"
+        return_content: true # Get the response body
+        status_code: 200 # Expect a 200 OK response
+      register: api_response_raw
+      # Fail if the API call itself returns an error status code
+      failed_when: api_response_raw.status != 200
+
+    - name: Parse and filter API response for tenants
+      # Use 'jq' filter on the 'content' (JSON string) from the uri module
+      ansible.builtin.set_fact:
+        found_tenants_formatted: |
+          {{ api_response_raw.content | from_json | json_query('tenants[?(@.type == `object` && (.crn | split(":")[5] | lower | contains(`' + target_region.lower() + '`)) && (.crn | lower | contains(`logs-router`)))] | [].{name: name, id: id, region: crn | split(":")[5], log_sink_crn: targets[0].log_sink_crn || "N/A", crn: crn}') }}
+
+    - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:
         msg: |
-          Active IBM Cloud Monitoring instances with platform metrics enabled were found:
-          {{ found_instance_result.stdout }}
-      when: found_instance_result.stdout | length > 0
+          Found IBM Cloud Log Routing tenants in region '{{ target_region }}':
+          {% for tenant in found_tenants_formatted %}
+          Tenant Name:     {{ tenant.name }}
+          Tenant ID:       {{ tenant.id }}
+          Region:          {{ tenant.region }}
+          Log Sink CRN:    {{ tenant.log_sink_crn }}
+          Log Router CRN:  {{ tenant.crn }}
+          {% endfor %}
+      when: found_tenants_formatted | length > 0
 
-    - name: Inform if no IBM Cloud Monitoring instances were found
+    - name: Inform if no IBM Cloud Log Routing tenants were found
       ansible.builtin.debug:
-        msg: "No active IBM Cloud Monitoring instances with platform metrics enabled were found."
-      when: found_instance_result.stdout | length == 0
+        msg: "No log routing tenants found in region '{{ target_region }}'."
+      when: found_tenants_formatted | length == 0
 
     - name: Log out of IBM Cloud
-      # Perform logout as a cleanup step.
       ansible.builtin.shell: |
         ibmcloud logout >/dev/null 2>&1
       changed_when: false
-      failed_when: false # Logout might fail if already logged out or session expired, but it shouldn't stop the playbook.
+      failed_when: false # Logout might fail, but it shouldn't stop the playbook.

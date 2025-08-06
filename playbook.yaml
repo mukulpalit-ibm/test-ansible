@@ -83,7 +83,7 @@
         ')
       register: found_log_instance_result
       environment:
-        API_RESPONSE: "{{ api_response_raw.conten }}"
+        API_RESPONSE: "{{ api_response_raw.content }}"
         TARGET_REGION: "{{ region }}"
 
     - name: Display found IBM Cloud Log Routing tenants

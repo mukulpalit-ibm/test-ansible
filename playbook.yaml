@@ -20,11 +20,6 @@
         msg: "Error: 'jq' is not installed. Please install 'jq' to run this playbook (e.g., sudo apt-get install jq)."
       when: jq_check.rc != 0
 
-    - name: Check if IBM Cloud API Key is provided
-      ansible.builtin.fail:
-        msg: "Error: The 'API_KEY' environment variable is not set. Please set it before running the playbook."
-      when: ibmcloud_api_key is not defined or ibmcloud_api_key | length == 0
-
     - name: Log in to IBM Cloud
       # Use the 'shell' module for commands that involve piping or complex shell features.
       # Redirect stdout/stderr to /dev/null to keep the output clean.

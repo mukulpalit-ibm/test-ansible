@@ -28,7 +28,7 @@
         API_KEY: "{{ ibmcloud_api_key }}" # Pass API_KEY to the shell environment
 
     - name: Set IAM Token fact
-      ansible.builtin.set_fact:
+      set_fact:
         iam_token: "{{ ibmcloud_auth_result.stdout }}"
       when: ibmcloud_auth_result.rc == 0
 
@@ -38,7 +38,7 @@
       when: ibmcloud_auth_result.rc == 0
 
     - name: Construct Logs Router API Endpoint
-      ansible.builtin.set_fact:
+      set_fact:
         logs_router_api_endpoint: "https://management.{{ region }}.logs-router.cloud.ibm.com/v1/tenants"
 
     - name: Search for IBM Cloud Log Routing tenants
@@ -56,7 +56,7 @@
 
     - name: Parse and filter API response for tenants
       # Use 'jq' filter on the 'content' (JSON string) from the uri module
-      ansible.builtin.set_fact:
+      set_fact:
         found_tenants_formatted: |
           {{ api_response_raw.content | from_json | json_query('tenants[?(@.type == `object` && (.crn | split(":")[5] | lower | contains(`' + target_region.lower() + '`)) && (.crn | lower | contains(`logs-router`)))] | [].{name: name, id: id, region: crn | split(":")[5], log_sink_crn: targets[0].log_sink_crn || "N/A", crn: crn}') }}
 

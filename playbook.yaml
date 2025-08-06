@@ -22,7 +22,7 @@
 
     - name: Log in to IBM Cloud
       ansible.builtin.shell: |
-        ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region
+        ibmcloud login --apikey "{{ API_KEY }}" --no-region
       register: ibmcloud_login_result
       changed_when: false
       # Fail if the login command returns a non-zero exit code or specific error messages.

@@ -72,30 +72,28 @@
 
     - name: Parse and filter API response for tenants
       # Use 'jq' filter on the 'content' (JSON string) from the uri module
-      set_fact:
-        found_tenants_formatted: |
-          {% set jmespath_query = "tenants[?(@.type == 'object' && (@.crn | split(':'))[5] == '%s' && (@.crn | lower | contains('logs-router')))]" | format(region.lower()) %}
-          {% set filtered_tenants = api_response_raw.content | from_json | json_query(jmespath_query) %}
-          {% set final_query = "[].{name: name, id: id, region: (@.crn | split(':'))[5], log_sink_crn: targets[0].log_sink_crn || 'N/A', crn: crn}" %}
-          {{ filtered_tenants | json_query(final_query) }}
+      ansible.builtin.shell: |
+        echo "$API_RESPONSE" | jq -r --arg region "$TARGET_REGION" '
+        .tenants[] | select(
+            (type == "object") and
+            ((.crn | split(":")[5]) | type == "string" and (ascii_downcase | contains($region | ascii_downcase))) and
+            (.crn | type == "string" and (ascii_downcase | contains("logs-router"))) # Added filter for "logs-router" in CRN
+        ) |
+        "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
+      ')
+      register: found_log_instance_result
 
     - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:
         msg: |
-          Found IBM Cloud Log Routing tenants in region '{{ region }}':
-          {% for tenant in found_tenants_formatted %}
-          Tenant Name:     {{ tenant.name }}
-          Tenant ID:       {{ tenant.id }}
-          Region:          {{ tenant.region }}
-          Log Sink CRN:    {{ tenant.log_sink_crn }}
-          Log Router CRN:  {{ tenant.crn }}
-          {% endfor %}
-      when: found_tenants_formatted | length > 0
+          Active IBM Cloud Logs Routing instance found:
+          {{ found_log_instance_result.stdout }}
+      when: found_log_instance_result.stdout | length > 0
 
     - name: Inform if no IBM Cloud Log Routing tenants were found
       ansible.builtin.debug:
         msg: "No log routing tenants found in region '{{ region }}'."
-      when: found_tenants_formatted | length == 0
+      when: found_log_instance_result.stdout | length == 0
 
     - name: Log out of IBM Cloud
       ansible.builtin.shell: |

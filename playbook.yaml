@@ -1,0 +1,12 @@
+---
+- name: Run a shell command on target hosts
+  hosts: all
+  become: true  # Use this if you need sudo privileges
+  tasks:
+    - name: Run 'uptime' command
+      shell: ibmcloud login
+      register: uptime_output
+
+    - name: Print the output
+      debug:
+        msg: "{{ uptime_output.stdout }}"

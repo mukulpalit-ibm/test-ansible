@@ -62,7 +62,7 @@
         url: "{{ logs_router_api_endpoint }}"
         method: GET
         headers:
-          Authorization: "Bearer {{ iam_token }}"
+          Authorization: "{{ iam_token }}"
           IBM-API-Version: "{{ api_version_date }}"
         return_content: true # Get the response body
         status_code: 200 # Expect a 200 OK response

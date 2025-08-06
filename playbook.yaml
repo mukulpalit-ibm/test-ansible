@@ -1,7 +1,6 @@
 ---
 - name: Run a shell command on target hosts
-  hosts: all
-  become: true  # Use this if you need sudo privileges
+  hosts: localhost
   tasks:
     - name: Run 'uptime' command
       shell: ibmcloud login

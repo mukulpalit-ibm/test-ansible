@@ -74,12 +74,12 @@
       # Use 'jq' filter on the 'content' (JSON string) from the uri module
       set_fact:
         found_tenants_formatted: |
-          {{ api_response_raw.content | from_json | json_query('tenants[?(@.type == `object` && (.crn | split(":")[5] | lower | contains(`' + target_region.lower() + '`)) && (.crn | lower | contains(`logs-router`)))] | [].{name: name, id: id, region: crn | split(":")[5], log_sink_crn: targets[0].log_sink_crn || "N/A", crn: crn}') }}
+          {{ api_response_raw.content | from_json | json_query('tenants[?(@.type == `object` && (.crn | split(":")[5] | lower | contains(`' + region.lower() + '`)) && (.crn | lower | contains(`logs-router`)))] | [].{name: name, id: id, region: crn | split(":")[5], log_sink_crn: targets[0].log_sink_crn || "N/A", crn: crn}') }}
 
     - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:
         msg: |
-          Found IBM Cloud Log Routing tenants in region '{{ target_region }}':
+          Found IBM Cloud Log Routing tenants in region '{{ region }}':
           {% for tenant in found_tenants_formatted %}
           Tenant Name:     {{ tenant.name }}
           Tenant ID:       {{ tenant.id }}
@@ -91,7 +91,7 @@
 
     - name: Inform if no IBM Cloud Log Routing tenants were found
       ansible.builtin.debug:
-        msg: "No log routing tenants found in region '{{ target_region }}'."
+        msg: "No log routing tenants found in region '{{ region }}'."
       when: found_tenants_formatted | length == 0
 
     - name: Log out of IBM Cloud

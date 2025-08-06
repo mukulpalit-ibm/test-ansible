@@ -82,6 +82,9 @@
         "Tenant Name:     \(.name)\nTenant ID:       \(.id)\nRegion:          \(.crn | split(":")[5])\nLog Sink CRN:    \(.targets[0].log_sink_crn // "N/A")\nLog Router CRN:  \(.crn)\n"
         ')
       register: found_log_instance_result
+      environment:
+        API_RESPONSE: "{{ api_response_raw.conten }}"
+        TARGET_REGION: "{{ region }}"
 
     - name: Display found IBM Cloud Log Routing tenants
       ansible.builtin.debug:

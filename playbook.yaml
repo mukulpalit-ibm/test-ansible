@@ -40,11 +40,14 @@
     - name: Construct Logs Router API Endpoint
       set_fact:
         logs_router_api_endpoint: "https://management.{{ region }}.logs-router.cloud.ibm.com/v1/tenants"
+
+    - name: Debug - Display Output (for troubleshooting)
+      ansible.builtin.debug:
+        msg: "output: {{ ibmcloud_auth_result.stdout }}"
         
     - name: Debug - Display IAM Token (for troubleshooting)
       ansible.builtin.debug:
         msg: "IAM Token (first 10 chars): {{ iam_token[:10] }}..."
-      no_log: true # Keep sensitive info out of logs
 
     - name: Debug - Display API Version Date
       ansible.builtin.debug:

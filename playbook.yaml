@@ -108,7 +108,7 @@
       ansible.builtin.debug:
         msg: |
           Active IBM Cloud Logs Routing instance found:
-          {{ found_log_instance_result.stdout }}
+          {{ found_tenants_result.stdout }}
       when: api_response_raw.content | length > 0
 
     - name: Inform if no IBM Cloud Log Routing tenants were found

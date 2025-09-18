@@ -22,6 +22,7 @@
           ansible.builtin.package:
             name: jq
             state: present
+            use: dnf
           become: yes
           become_user: root
 

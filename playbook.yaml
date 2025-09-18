@@ -18,20 +18,10 @@
           set_fact:
             ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}" # pragma: allowlist secret
             target_instance_filter: "sysdig-monitor"
-        - name: Check if 'jq' command is available
-          ansible.builtin.command: which jq
-          register: jq_check
-          ignore_errors: true
-          changed_when: false
-
-        - name: Fail if 'jq' is not installed
-          ansible.builtin.fail:
-            msg: "Error: 'jq' is not installed. Please install 'jq' to run this playbook (e.g., sudo apt-get install jq)."
-          when: jq_check.rc != 0
 
         - name: Log in to IBM Cloud
           ansible.builtin.shell: |
-            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region
+            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
           register: ibmcloud_login_result
           changed_when: false
           failed_when: ibmcloud_login_result.rc != 0 or
@@ -43,23 +33,9 @@
             msg: "Authentication successful."
           when: ibmcloud_login_result.rc == 0
 
-        # - name: List IBM Cloud service instances and filter for Cloud Monitoring instance
-        #   ansible.builtin.shell: |
-        #     ibmcloud resource service-instances --service-name {{ target_instance_filter }} --output JSON | \
-        #     jq -r '
-        #         .[] | select(
-        #             ((.id | test("{{ target_instance_filter }}"; "i")) or (.crn | test("{{ target_instance_filter }}"; "i"))) and
-        #             .state == "active" and
-        #             .parameters.default_receiver == true
-        #         ) |
-        #         "Instance Name: \(.name)\nInstance ID:   \(.guid)\nRegion:        \(.region_id)\n"
-        #     '
-        #   register: found_instance_result
-        #   changed_when: false
-        #   failed_when: false
         - name: List IBM Cloud service instances
           ansible.builtin.shell: |
-            ibmcloud resource service-instances --output JSON
+            ibmcloud resource service-instances --service-name {{ target_instance_filter }}  --output JSON
           register: ibmcloud_instances
           changed_when: false
         
@@ -67,7 +43,7 @@
           set_fact:
             filtered_instances: "{{ ibmcloud_instances.stdout | from_json | json_query(query) }}"
           vars:
-            query: "[?((contains(id, '{{ target_instance_filter }}')) || (contains(crn, '{{ target_instance_filter }}'))) && state=='active' && parameters.default_receiver==`true`].{Name: name, ID: guid, Region: region_id}"
+            query: "[?state=='active' && parameters.default_receiver==`true`].{Name: name, ID: guid, Region: region_id}"
         
         - name: Fail if found IBM Cloud Monitoring instances with platform metrics
           ansible.builtin.fail:
@@ -80,9 +56,6 @@
           ansible.builtin.debug:
             msg: "No active IBM Cloud Monitoring instances with platform metrics enabled were found."
           when: filtered_instances | length == 0
-
-
-
       when: is_enabled
       rescue:
         - name: Fail with a specific error message

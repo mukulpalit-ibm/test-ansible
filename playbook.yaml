@@ -58,8 +58,8 @@
           changed_when: false
           failed_when: false
 
-        - name: Display found IBM Cloud Monitoring instances
-          ansible.builtin.debug:
+        - name: Fail if found IBM Cloud Monitoring instances with platform metrics
+          ansible.builtin.fail:
             msg: |
               Active IBM Cloud Monitoring instances with platform metrics enabled were found:
               {{ found_instance_result.stdout }}

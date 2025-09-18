@@ -18,20 +18,16 @@
           set_fact:
             ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}" # pragma: allowlist secret
             target_instance_filter: "sysdig-monitor"
-        - name: Check if 'jq' command is available
-          ansible.builtin.command: which jq
-          register: jq_check
-          ignore_errors: true
-          changed_when: false
-
-        - name: Fail if 'jq' is not installed
-          ansible.builtin.fail:
-            msg: "Error: 'jq' is not installed. Please install 'jq' to run this playbook (e.g., sudo apt-get install jq)."
-          when: jq_check.rc != 0
+        - name: Ensure 'jq' is installed
+          ansible.builtin.package:
+            name: jq
+            state: present
+          become: yes
+          become_user: root
 
         - name: Log in to IBM Cloud
           ansible.builtin.shell: |
-            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region
+            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
           register: ibmcloud_login_result
           changed_when: false
           failed_when: ibmcloud_login_result.rc != 0 or
@@ -45,7 +41,7 @@
 
         - name: List IBM Cloud service instances and filter for Cloud Monitoring instance
           ansible.builtin.shell: |
-            ibmcloud resource service-instances --output JSON | \
+            ibmcloud resource service-instances --service-name {{ target_instance_filter }} --output JSON | \
             jq -r '
                 .[] | select(
                     ((.id | test("{{ target_instance_filter }}"; "i")) or (.crn | test("{{ target_instance_filter }}"; "i"))) and
@@ -69,13 +65,17 @@
           ansible.builtin.debug:
             msg: "No active IBM Cloud Monitoring instances with platform metrics enabled were found."
           when: found_instance_result.stdout | length == 0
-
+      when: is_enabled
+      rescue:
+        - name: Fail with a specific error message
+          ansible.builtin.fail:
+            msg: "An unhandled error occurred in the primary block. Check previous task output for details."
+      always:
         - name: Log out of IBM Cloud
           ansible.builtin.shell: |
             ibmcloud logout >/dev/null 2>&1
           changed_when: false
           failed_when: false
-      when: is_enabled
 
     - name: Skip due to environment variable
       ansible.builtin.debug:

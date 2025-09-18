@@ -50,7 +50,7 @@
                 .[] | select(
                     ((.id | test("{{ target_instance_filter }}"; "i")) or (.crn | test("{{ target_instance_filter }}"; "i"))) and
                     .state == "active" and
-                    .parameters.default_receiver == false
+                    .parameters.default_receiver == true
                 ) |
                 "Instance Name: \(.name)\nInstance ID:   \(.guid)\nRegion:        \(.region_id)\n"
             '

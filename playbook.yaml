@@ -62,12 +62,12 @@
             ibmcloud resource service-instances --output JSON
           register: ibmcloud_instances
           changed_when: false
-
+                
         - name: Filter for Cloud Monitoring instances with platform metrics
           set_fact:
             filtered_instances: "{{ ibmcloud_instances.stdout | from_json | json_query(query) }}"
           vars:
-            query: "[?((id || crn) contains '{{ target_instance_filter }}') && state=='active' && parameters.default_receiver==`true`].{Name: name, ID: guid, Region: region_id}"
+            query: "[?((contains(id, '{{ target_instance_filter }}')) || (contains(crn, '{{ target_instance_filter }}'))) && state=='active' && parameters.default_receiver==`true`].{Name: name, ID: guid, Region: region_id}"
 
         - name: Fail if found IBM Cloud Monitoring instances with platform metrics
           ansible.builtin.fail:

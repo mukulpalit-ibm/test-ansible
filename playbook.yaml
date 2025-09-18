@@ -31,14 +31,12 @@
 
         - name: Log in to IBM Cloud
           ansible.builtin.shell: |
-            ibmcloud login --apikey "{{ API_KEY }}" --no-region
+            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region
           register: ibmcloud_login_result
           changed_when: false
           failed_when: ibmcloud_login_result.rc != 0 or
                        'FAILED' in ibmcloud_login_result.stderr or
                        'Error' in ibmcloud_login_result.stderr
-          environment:
-            API_KEY: "{{ ibmcloud_api_key }}" # pragma: allowlist secret
 
         - name: Display IBM Cloud login success message
           ansible.builtin.debug:

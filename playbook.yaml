@@ -4,13 +4,12 @@
   connection: local
   gather_facts: false
 
-  vars:
-    # Use Ansible's `lookup` to get the API key and regions from environment variables
-    ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
-    tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
-    target_service_name: "logs-router"
-
   tasks:
+    - name: Set conditional variable from environment
+      set_fact:
+        ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
+        tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
+        target_service_name: "logs-router"
     - name: Log in to IBM Cloud
       ansible.builtin.shell: |
         ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
@@ -88,11 +87,3 @@
       loop: "{{ api_response.results }}"
       loop_control:
         loop_var: item
-      
-  # The 'always' block ensures logout happens regardless of success or failure.
-  always:
-    - name: Log out of IBM Cloud
-      ansible.builtin.shell: |
-        ibmcloud logout >/dev/null 2>&1
-      changed_when: false
-      failed_when: false

@@ -37,7 +37,7 @@
     - name: Parse regions from environment variable (older Ansible)
       set_fact:
         regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
-    
+
     - name: Loop through each region and find log routing tenants
       ansible.builtin.uri:
         url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
@@ -52,7 +52,37 @@
       loop_control:
         loop_var: item
       ignore_errors: true
+
+    - name: Set a fact to collect all found tenants
+      set_fact:
+        all_found_tenants: >
+          [
+            {% for item in api_response.results %}
+              {% set tenants_in_region = item.content | from_json | json_query(query) | default([]) %}
+              {% if tenants_in_region is defined and tenants_in_region | length > 0 %}
+                {{ tenants_in_region | to_json }}
+                {% if not loop.last %},{% endif %}
+              {% endif %}
+            {% endfor %}
+          ]
+      vars:
+        query: "tenants[?contains(crn, '{{ target_service_name }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
+      run_once: true
+
+    - name: Fail if any tenants were found
+      ansible.builtin.fail:
+        msg: |
+          Active log routing tenants were found in the following regions:
+          {{ all_found_tenants | to_nice_json }}
+      when: all_found_tenants | length > 2 # Check for an empty JSON list
       
-    - name: Display ALL API call results for debugging
+    - name: Inform if no tenants were found
       ansible.builtin.debug:
-        var: api_response.results
+        msg: "No active log routing tenants were found in any specified region. The check passed successfully."
+      when: all_found_tenants | length <= 2
+
+    - name: Log out of IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud logout >/dev/null 2>&1
+      changed_when: false
+      failed_when: false

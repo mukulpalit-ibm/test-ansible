@@ -31,9 +31,11 @@
       changed_when: false
       failed_when: iam_token_result.rc != 0
 
-    - name: Parse regions from environment variable
+    - name: Parse regions from environment variable (older Ansible)
       set_fact:
-        regions_list: "{{ tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') | trim | split(',') }}"
+        # Use regex_replace to convert the comma-separated list into a YAML list,
+        # then use from_yaml to parse it into an actual Ansible list.
+        regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
     
     - name: Fail if no valid regions are found
       ansible.builtin.fail:

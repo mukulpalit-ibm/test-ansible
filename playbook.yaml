@@ -55,7 +55,20 @@
 
     - name: Consolidate all found tenants into a single list
       set_fact:
-        all_found_tenants: "{{ api_response.results | selectattr('status', 'equalto', 200) | map(attribute='content') | map('from_json') | map(attribute='tenants') | flatten | selectattr('crn', 'search', 'logs-router') | list }}"
+        all_found_tenants: >
+          {{ api_response.results
+             | selectattr('status', 'equalto', 200)
+             | map(attribute='content')
+             | map('from_json')
+             | map(attribute='tenants')
+             | flatten
+             | selectattr('crn', 'search', 'logs-router')
+             | rejectattr('service_name', 'defined')
+             | list }}
+
+    # - name: Consolidate all found tenants into a single list
+    #   set_fact:
+    #     all_found_tenants: "{{ api_response.results | selectattr('status', 'equalto', 200) | map(attribute='content') | map('from_json') | map(attribute='tenants') | flatten | selectattr('crn', 'search', 'logs-router') | list }}"
       
     - name: Fail if any tenants were found
       ansible.builtin.fail:

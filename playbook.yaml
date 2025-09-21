@@ -35,7 +35,7 @@
       changed_when: false
       failed_when: iam_token_result.rc != 0
 
-    - name: Parse regions from environment variable (older Ansible)
+    - name: Parse regions from environment variable
       set_fact:
         regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
 
@@ -63,7 +63,7 @@
       loop: "{{ api_response.results }}"
       loop_control:
         loop_var: item
-      when: item.status == 200 and (item.content | from_json).tenants is defined
+      when: item.status == 200 and (item.content | from_json).tenants is defined and (item.content | from_json).tenants | length > 0
 
     - name: Fail if any tenants were found
       ansible.builtin.fail:

@@ -10,99 +10,85 @@
     target_service_name: "logs-router"
 
   tasks:
-    - name: Run main tasks in a block
-      block:
-        - name: Ensure API key is set
-          ansible.builtin.fail:
-            msg: "The ibmcloud_api_key environment variable is not set."
-          when: ibmcloud_api_key | length == 0
+    - name: Ensure API key and regions are set
+      ansible.builtin.fail:
+        msg: "The ibmcloud_api_key or tenant_region environment variable is not set."
+      when: ibmcloud_api_key | length == 0 or tenant_region | length == 0
 
-        - name: Log in to IBM Cloud
-          ansible.builtin.shell: |
-            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
-          register: ibmcloud_login_result
-          changed_when: false
-          failed_when: ibmcloud_login_result.rc != 0 or 'FAILED' in ibmcloud_login_result.stderr or 'Error' in ibmcloud_login_result.stderr
+    - name: Log in to IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
+      register: ibmcloud_login_result
+      changed_when: false
+      failed_when: ibmcloud_login_result.rc != 0 or 'FAILED' in ibmcloud_login_result.stderr or 'Error' in ibmcloud_login_result.stderr
 
-        - name: Display IBM Cloud login success message
-          ansible.builtin.debug:
-            msg: "Authentication successful."
-          when: ibmcloud_login_result.rc == 0
+    - name: Display IBM Cloud login success message
+      ansible.builtin.debug:
+        msg: "Authentication successful."
+      when: ibmcloud_login_result.rc == 0
 
-        - name: Get IAM token for API calls
-          ansible.builtin.shell: |
-            ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
-          register: iam_token_result
-          changed_when: false
-          failed_when: iam_token_result.rc != 0
+    - name: Get IAM token for API calls
+      ansible.builtin.shell: |
+        ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
+      register: iam_token_result
+      changed_when: false
+      failed_when: iam_token_result.rc != 0
 
-        - name: Parse regions from environment variable (older Ansible)
-          set_fact:
-            regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
-        
-        - name: Fail if no valid regions are found
-          ansible.builtin.fail:
-            msg: "No valid regions found in 'tenant_region'. Exiting."
-          when: regions_list | length == 0
+    - name: Parse regions from environment variable (older Ansible)
+      set_fact:
+        regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
+    
+    - name: Loop through each region and find log routing tenants
+      ansible.builtin.uri:
+        url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
+        method: GET
+        headers:
+          Authorization: "{{ iam_token_result.stdout }}"
+          IBM-API-Version: 2025-08-06
+        return_content: true
+        validate_certs: true
+      register: api_response
+      loop: "{{ regions_list }}"
+      loop_control:
+        loop_var: item
+      ignore_errors: true
+      
+    - name: Display log routing tenants found
+      ansible.builtin.debug:
+        msg: |
+          Found tenants in {{ item.item }}:
+          {{ item.content | from_json | json_query(query) | to_nice_json }}
+      vars:
+        query: "tenants[?contains(crn, '{{ target_service_name }}') && contains(crn, '{{ item.item }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
+      when:
+        - item.status == 200
+        - (item.content | from_json).tenants is defined
+        - (item.content | from_json).tenants | length > 0
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
 
-        - name: Loop through each region and find log routing tenants
-          ansible.builtin.uri:
-            url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
-            method: GET
-            headers:
-              Authorization: "{{ iam_token_result.stdout }}"
-              IBM-API-Version: 2025-08-06
-            return_content: true
-            validate_certs: true
-          register: api_response
-          loop: "{{ regions_list }}"
-          loop_control:
-            loop_var: item
-          ignore_errors: true
-          
-        - name: Display log routing tenants found
-          ansible.builtin.debug:
-            msg: |
-              Found tenants in {{ item.item }}:
-              {{ item.content | from_json | json_query(query) | to_nice_json }}
-          vars:
-            query: "tenants[?contains(crn, '{{ target_service_name }}') && contains(crn, '{{ item.item }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
-          when:
-            - item.status == 200
-            - (item.content | from_json).tenants is defined
-            - (item.content | from_json).tenants | length > 0
-          loop: "{{ api_response.results }}"
-          loop_control:
-            loop_var: item
+    - name: Display message for regions with no tenants
+      ansible.builtin.debug:
+        msg: "No log routing tenants found in region '{{ item.item }}'."
+      when: 
+        - item.status == 200
+        - (item.content | from_json).tenants is defined
+        - (item.content | from_json).tenants | length == 0
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
 
-        - name: Display message for regions with no tenants
-          ansible.builtin.debug:
-            msg: "No log routing tenants found in region '{{ item.item }}'."
-          when: 
-            - item.status == 200
-            - (item.content | from_json).tenants is defined
-            - (item.content | from_json).tenants | length == 0
-          loop: "{{ api_response.results }}"
-          loop_control:
-            loop_var: item
+    - name: Display an error message if the API call failed
+      ansible.builtin.debug:
+        msg: "API call for region '{{ item.item }}' failed. Status code: {{ item.status }}. Error: {{ item.json.error_message | default('Unknown error.') }}"
+      when: item.status != 200
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
 
-        - name: Display an error message if the API call failed
-          ansible.builtin.debug:
-            msg: "API call for region '{{ item.item }}' failed. Status code: {{ item.status }}. Error: {{ item.json.error_message | default('Unknown error.') }}"
-          when: item.status != 200
-          loop: "{{ api_response.results }}"
-          loop_control:
-            loop_var: item
-
-      rescue:
-        - name: Log out on error
-          ansible.builtin.shell: |
-            ibmcloud logout >/dev/null 2>&1
-          changed_when: false
-          failed_when: false
-      always:
-        - name: Log out of IBM Cloud
-          ansible.builtin.shell: |
-            ibmcloud logout >/dev/null 2>&1
-          changed_when: false
-          failed_when: false
+    - name: Log out of IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud logout >/dev/null 2>&1
+      changed_when: false
+      failed_when: false

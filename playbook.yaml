@@ -56,17 +56,10 @@
       loop_control:
         loop_var: item
       ignore_errors: true
-
+      
     - name: Check and display API results
       ansible.builtin.debug:
-        msg: "{{ item.content | from_json | json_query(query) }}"
-      vars:
-        query: "tenants[?contains(crn, '{{ target_service_name }}') && contains(crn, '{{ item.item }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
-      when: 
-        - item.status == 200
-        - item.content | length > 0
-        - (item.content | from_json).tenants is defined
-        - (item.content | from_json).tenants | length > 0
+        var: item
       loop: "{{ api_response.results }}"
       loop_control:
         loop_var: item

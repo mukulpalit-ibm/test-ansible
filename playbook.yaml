@@ -8,7 +8,7 @@
     ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
     tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
     target_service_name: "logs-router"
-
+    
   tasks:
     - name: Ensure API key and regions are set
       ansible.builtin.fail:
@@ -34,7 +34,7 @@
       changed_when: false
       failed_when: iam_token_result.rc != 0
 
-    - name: Parse regions from environment variable (older Ansible)
+    - name: Parse regions from environment variable
       set_fact:
         regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
     
@@ -52,7 +52,23 @@
       loop_control:
         loop_var: item
       ignore_errors: true
+
+    - name: Consolidate all found tenants into a single list
+      set_fact:
+        all_found_tenants: "{{ api_response.results | selectattr('status', 'equalto', 200) | map(attribute='content') | map('from_json') | map(attribute='tenants') | flatten | selectattr('crn', 'search', 'logs-router') | list }}"
       
-    - name: Display ALL API call results for debugging
+    - name: Fail if any tenants were found
+      ansible.builtin.fail:
+        msg: "Active log routing tenants were found: {{ all_found_tenants | to_nice_json }}"
+      when: all_found_tenants | length > 0
+
+    - name: Inform that no tenants were found
       ansible.builtin.debug:
-        var: api_response.results
+        msg: "No active log routing tenants were found in any specified region. The check passed successfully."
+      when: all_found_tenants | length == 0
+      
+    - name: Log out of IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud logout >/dev/null 2>&1
+      changed_when: false
+      failed_when: false

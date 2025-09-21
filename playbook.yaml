@@ -30,10 +30,10 @@
       register: iam_token_result
       changed_when: false
       failed_when: iam_token_result.rc != 0
-
+    
     - name: Parse regions from environment variable
       set_fact:
-        regions_list: "{{ tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') | split(',') }}"
+        regions_list: "{{ tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') .split(',') }}"
     
     - name: Fail if no valid regions are found
       ansible.builtin.fail:

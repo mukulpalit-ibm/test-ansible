@@ -5,7 +5,6 @@
   gather_facts: false
 
   vars:
-    # Use lookup to get variables from the environment
     ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
     tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
     target_service_name: "logs-router"
@@ -37,7 +36,6 @@
 
     - name: Parse regions from environment variable (older Ansible)
       set_fact:
-        # Use from_yaml to handle string-to-list conversion
         regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
     
     - name: Fail if no valid regions are found
@@ -94,7 +92,6 @@
       loop_control:
         loop_var: item
       
-  # The `always` block ensures logout happens regardless of success or failure.
   always:
     - name: Log out of IBM Cloud
       ansible.builtin.shell: |

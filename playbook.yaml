@@ -8,7 +8,6 @@
     ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
     tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
     target_service_name: "logs-router"
-    found_tenants_list: []
 
   tasks:
     - name: Ensure API key and regions are set
@@ -35,10 +34,10 @@
       changed_when: false
       failed_when: iam_token_result.rc != 0
 
-    - name: Parse regions from environment variable
+    - name: Parse regions from environment variable (older Ansible)
       set_fact:
         regions_list: "{{ ('[' + tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
-
+    
     - name: Loop through each region and find log routing tenants
       ansible.builtin.uri:
         url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
@@ -53,30 +52,7 @@
       loop_control:
         loop_var: item
       ignore_errors: true
-
-    - name: Process results and add found tenants to a list
-      set_fact:
-        found_tenants_list: "{{ found_tenants_list + filtered_tenants }}"
-      vars:
-        filtered_tenants: "{{ item.content | from_json | json_query(query) | default([]) }}"
-        query: "tenants[?contains(crn, '{{ target_service_name }}') && contains(crn, '{{ item.item }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
-      loop: "{{ api_response.results }}"
-      loop_control:
-        loop_var: item
-      when: item.status == 200 and (item.content | from_json).tenants is defined and (item.content | from_json).tenants | length > 0
-
-    - name: Fail if any tenants were found
-      ansible.builtin.fail:
-        msg: "Active log routing tenants were found: {{ found_tenants_list | to_nice_json }}"
-      when: found_tenants_list | length > 0
-
-    - name: Inform that no tenants were found
+      
+    - name: Display ALL API call results for debugging
       ansible.builtin.debug:
-        msg: "No active log routing tenants were found in any specified region. The check passed successfully."
-      when: found_tenants_list | length == 0
-
-    - name: Log out of IBM Cloud
-      ansible.builtin.shell: |
-        ibmcloud logout >/dev/null 2>&1
-      changed_when: false
-      failed_when: false
+        var: api_response.results

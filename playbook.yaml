@@ -1,74 +1,98 @@
 ---
-- name: Find IBM Cloud Monitoring Instance with Platform Metrics
+- name: Find IBM Cloud Log Routing Tenants in Specific Regions
   hosts: localhost
   connection: local
   gather_facts: false
 
+  vars:
+    # Use Ansible's `lookup` to get the API key and regions from environment variables
+    ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
+    tenant_region: "{{ lookup('env', 'tenant_region') | default('') }}"
+    target_service_name: "logs-router"
+
   tasks:
-    - name: Set conditional variable from environment
-      set_fact:
-        enable_platform_metrics: "{{ lookup('env', 'enable_platform_metrics') | default('false') | lower }}"
-    - name: Ensure enable_platform_metrics is a boolean
-      set_fact:
-        is_enabled: "{{ enable_platform_metrics | bool }}"
+    - name: Log in to IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
+      register: ibmcloud_login_result
+      changed_when: false
+      failed_when: ibmcloud_login_result.rc != 0 or
+                   'FAILED' in ibmcloud_login_result.stderr or
+                   'Error' in ibmcloud_login_result.stderr
 
-    - name: Find IBM Cloud Monitoring Instance
-      block:
-        - name: get running ansible env variables
-          set_fact:
-            ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}" # pragma: allowlist secret
-            target_instance_filter: "sysdig-monitor"
-
-        - name: Log in to IBM Cloud
-          ansible.builtin.shell: |
-            ibmcloud login --apikey "{{ ibmcloud_api_key }}" --no-region -q >/dev/null 2>&1
-          register: ibmcloud_login_result
-          changed_when: false
-          failed_when: ibmcloud_login_result.rc != 0 or
-                       'FAILED' in ibmcloud_login_result.stderr or
-                       'Error' in ibmcloud_login_result.stderr
-
-        - name: Display IBM Cloud login success message
-          ansible.builtin.debug:
-            msg: "Authentication successful."
-          when: ibmcloud_login_result.rc == 0
-
-        - name: List IBM Cloud service instances
-          ansible.builtin.shell: |
-            ibmcloud resource service-instances --service-name {{ target_instance_filter }}  --output JSON
-          register: ibmcloud_instances
-          changed_when: false
-        
-        - name: Filter for Cloud Monitoring instances with platform metrics
-          set_fact:
-            filtered_instances: "{{ ibmcloud_instances.stdout | from_json | json_query(query) }}"
-          vars:
-            query: "[?state=='active' && parameters.default_receiver==`true`].{Name: name, ID: guid, Region: region_id}"
-        
-        - name: Fail if found IBM Cloud Monitoring instances with platform metrics
-          ansible.builtin.fail:
-            msg: |
-              Active IBM Cloud Monitoring instances with platform metrics enabled were found:
-              {{ filtered_instances }}
-          when: filtered_instances | length > 0
-        
-        - name: Inform if no IBM Cloud Monitoring instances were found
-          ansible.builtin.debug:
-            msg: "No active IBM Cloud Monitoring instances with platform metrics enabled were found."
-          when: filtered_instances | length == 0
-      when: is_enabled
-      rescue:
-        - name: Fail with a specific error message
-          ansible.builtin.fail:
-            msg: "An unhandled error occurred in the primary block. Check previous task output for details."
-      always:
-        - name: Log out of IBM Cloud
-          ansible.builtin.shell: |
-            ibmcloud logout >/dev/null 2>&1
-          changed_when: false
-          failed_when: false
-
-    - name: Skip due to environment variable
+    - name: Display IBM Cloud login success message
       ansible.builtin.debug:
-        msg: "Skipping search for IBM Cloud Monitoring instances because 'enable_platform_metrics' is not set to 'true'."
-      when: not is_enabled
+        msg: "Authentication successful."
+      when: ibmcloud_login_result.rc == 0
+
+    - name: Get IAM token for API calls
+      ansible.builtin.shell: |
+        ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
+      register: iam_token_result
+      changed_when: false
+      failed_when: iam_token_result.rc != 0
+
+    - name: Parse regions from environment variable
+      set_fact:
+        regions_list: "{{ tenant_region | replace('[', '') | replace(']', '') | replace('\"', '') | split(',') }}"
+    
+    - name: Fail if no valid regions are found
+      ansible.builtin.fail:
+        msg: "No valid regions found in 'tenant_region'. Exiting."
+      when: regions_list | length == 0
+
+    - name: Loop through each region and find log routing tenants
+      ansible.builtin.uri:
+        url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
+        method: GET
+        headers:
+          Authorization: "{{ iam_token_result.stdout }}"
+          IBM-API-Version: 2025-08-06
+        return_content: true
+        validate_certs: true
+      register: api_response
+      loop: "{{ regions_list }}"
+      loop_control:
+        loop_var: item
+      ignore_errors: true
+
+    - name: Check and display API results
+      ansible.builtin.debug:
+        msg: "{{ item.content | from_json | json_query(query) }}"
+      vars:
+        query: "tenants[?contains(crn, '{{ target_service_name }}') && contains(crn, '{{ item.item }}') && state=='active'].{Name: name, ID: id, Region: '{{ item.item }}', CRN: crn}"
+      when: 
+        - item.status == 200
+        - item.content | length > 0
+        - (item.content | from_json).tenants is defined
+        - (item.content | from_json).tenants | length > 0
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
+    
+    - name: Display message for regions with no tenants
+      ansible.builtin.debug:
+        msg: "No log routing tenants found in region '{{ item.item }}'."
+      when: 
+        - item.status == 200
+        - (item.content | from_json).tenants is defined
+        - (item.content | from_json).tenants | length == 0
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
+
+    - name: Display an error message if the API call failed
+      ansible.builtin.debug:
+        msg: "API call for region '{{ item.item }}' failed. Status code: {{ item.status }}. Error: {{ item.json.error_message | default('Unknown error.') }}"
+      when: item.status != 200
+      loop: "{{ api_response.results }}"
+      loop_control:
+        loop_var: item
+      
+  # The 'always' block ensures logout happens regardless of success or failure.
+  always:
+    - name: Log out of IBM Cloud
+      ansible.builtin.shell: |
+        ibmcloud logout >/dev/null 2>&1
+      changed_when: false
+      failed_when: false

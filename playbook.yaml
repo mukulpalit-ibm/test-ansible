@@ -53,7 +53,7 @@
         loop_var: item
       ignore_errors: true
 
-    - name: Consolidate all found tenants into a single list
+    - name: Consolidate and filter all found tenants into a single list
       set_fact:
         all_found_tenants: >
           {{ api_response.results
@@ -65,14 +65,25 @@
              | selectattr('crn', 'search', 'logs-router')
              | rejectattr('service_name', 'defined')
              | list }}
-
-    # - name: Consolidate all found tenants into a single list
-    #   set_fact:
-    #     all_found_tenants: "{{ api_response.results | selectattr('status', 'equalto', 200) | map(attribute='content') | map('from_json') | map(attribute='tenants') | flatten | selectattr('crn', 'search', 'logs-router') | list }}"
       
+    - name: Format the output for found tenants
+      set_fact:
+        formatted_tenants: |
+          {% for tenant in all_found_tenants %}
+          Tenant Name:     {{ tenant.name }}
+          Tenant ID:       {{ tenant.id }}
+          Region:          {{ tenant.crn.split(':')[5] }}
+          Log Sink CRN:    {{ tenant.targets[0].log_sink_crn | default('N/A') }}
+          Log Router CRN:  {{ tenant.crn }}
+          ---------------------------------------------------
+          {% endfor %}
+      when: all_found_tenants | length > 0
+
     - name: Fail if any tenants were found
       ansible.builtin.fail:
-        msg: "Active log routing tenants were found: {{ all_found_tenants | to_nice_json }}"
+        msg: |
+          Active log routing tenants were found.
+          {{ formatted_tenants }}
       when: all_found_tenants | length > 0
 
     - name: Inform that no tenants were found

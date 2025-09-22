@@ -41,8 +41,7 @@
             
         - name: Parse regions from environment variable
           set_fact:
-            regions_list: "{{ logs_routing_tenant_regions | from_yaml }}"
-            # regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
+            regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
     
         - name: Initialize failed regions list
           set_fact:
@@ -53,7 +52,7 @@
             url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
             method: GET
             headers:
-              Authorization: "{{ iam_token_result }}"  # Use the correctly set variable
+              Authorization: "{{ iam_token_result }}"
               IBM-API-Version: 2025-08-06
             return_content: true
             validate_certs: true

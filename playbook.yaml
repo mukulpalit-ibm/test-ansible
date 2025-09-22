@@ -41,7 +41,8 @@
             
         - name: Parse regions from environment variable
           set_fact:
-            regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
+            regions_list: "{{ logs_routing_tenant_regions | from_yaml }}"
+            # regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
     
         - name: Initialize failed regions list
           set_fact:

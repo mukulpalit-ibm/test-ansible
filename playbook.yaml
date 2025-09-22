@@ -8,13 +8,13 @@
     ibmcloud_api_key: "{{ lookup('env', 'ibmcloud_api_key') }}"
     logs_routing_tenant_regions: "{{ lookup('env', 'logs_routing_tenant_regions') | default('') }}"
     target_service_name: "logs-router"
-    
+
   tasks:
     - name: Ensure API key and regions are set
       ansible.builtin.fail:
         msg: "The ibmcloud_api_key or logs_routing_tenant_regions environment variable is not set."
       when: ibmcloud_api_key | length == 0 or logs_routing_tenant_regions | length == 0
-    
+
     - name: Find IBM Cloud Monitoring Instance
       block:
         - name: Log in to IBM Cloud
@@ -28,13 +28,6 @@
           ansible.builtin.debug:
             msg: "Authentication successful."
           when: ibmcloud_login_result.rc == 0
-
-      # - name: Get IAM token for API calls
-      #   ansible.builtin.shell: |
-      #     ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
-      #   register: iam_token_result
-      #   changed_when: false
-      #   failed_when: iam_token_result.rc != 0
     
         - name: Get IAM token for API calls
           ansible.builtin.shell: ibmcloud iam oauth-tokens --output JSON
@@ -42,10 +35,10 @@
           changed_when: false
           failed_when: ibmcloud_token_output.rc != 0
 
-        - name: Extract IAM token using from_json and json_query
+        - name: Extract and set IAM token
           set_fact:
             iam_token_result: "{{ ibmcloud_token_output.stdout | from_json | json_query('iam_token') }}"
-
+            
         - name: Parse regions from environment variable
           set_fact:
             regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
@@ -59,7 +52,7 @@
             url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
             method: GET
             headers:
-              Authorization: "{{ iam_token_result.stdout }}"
+              Authorization: "{{ iam_token_result }}"  # Use the correctly set variable
               IBM-API-Version: 2025-08-06
             return_content: true
             validate_certs: true

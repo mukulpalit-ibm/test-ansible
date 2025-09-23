@@ -40,6 +40,10 @@
     - name: Parse regions from environment variable
       set_fact:
         regions_list: "{{ logs_routing_tenant_regions | from_yaml }}"
+
+    - name: Initialize failed regions list
+      set_fact:
+        failed_regions: []
     
     - name: Loop through each region and find log routing tenants
       ansible.builtin.uri:
@@ -55,6 +59,17 @@
       loop_control:
         loop_var: item
       ignore_errors: true
+
+    - name: Aggregate regions where tenant API call failed
+      set_fact:
+        failed_regions: "{{ failed_regions + [item.item] }}"
+      when: item.failed or (item.status is defined and item.status != 200)
+      loop: "{{ api_response.results }}"
+
+    - name: Report failed regions if any API calls failed
+      ansible.builtin.debug:
+        msg: "The following regions failed during the tenant lookup: {{ failed_regions }}"
+      when: failed_regions | length > 0
 
     - name: Consolidate and filter all found tenants into a single list
       set_fact:

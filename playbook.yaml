@@ -55,6 +55,13 @@
           loop_control:
             loop_var: item
           ignore_errors: true
+        - name: Print Response
+          ansible.builtin.debug:
+            var: item
+          loop: "{{ api_response.results }}"
+          loop_control:
+            loop_var: item
+        
         - name: Consolidate and filter all found tenants into a single list
           set_fact:
             all_found_tenants: |

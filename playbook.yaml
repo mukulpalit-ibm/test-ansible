@@ -62,7 +62,14 @@
           loop_control:
             loop_var: item
           ignore_errors: true
-    
+
+        - name: **DEBUG: Print API response for each item**
+          ansible.builtin.debug:
+            var: item
+          loop: "{{ api_response.results }}"
+          loop_control:
+            loop_var: item
+
         - name: Aggregate regions where tenant API call failed
           set_fact:
             failed_regions: "{{ failed_regions + [item.item] }}"

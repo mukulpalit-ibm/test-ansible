@@ -55,12 +55,6 @@
           loop_control:
             loop_var: item
           ignore_errors: true
-        - name: Print API response for each item
-          ansible.builtin.debug:
-            var: item
-          loop: "{{ api_response.results }}"
-          loop_control:
-            loop_var: item
         - name: Consolidate and filter all found tenants into a single list
           set_fact:
             all_found_tenants: |
@@ -77,15 +71,10 @@
           set_fact:
             formatted_tenants: >
               {% for tenant in all_found_tenants %}
-
               Tenant Name:     {{ tenant.name }}
-
               Tenant ID:       {{ tenant.id }}
-
               Region:          {{ tenant.crn.split(':')[5] }}
-
               Log Sink CRN:    {{ tenant.targets[0].log_sink_crn | default('N/A') }}
-
               Log Router CRN:  {{ tenant.crn }}
 
               {% endfor %}

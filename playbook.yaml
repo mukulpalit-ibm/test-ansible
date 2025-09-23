@@ -10,12 +10,6 @@
     target_service_name: "logs-router"
     
   tasks:
-    - name: Display environment variable values
-      ansible.builtin.debug:
-        msg:
-          - "ibmcloud_api_key: {{ ibmcloud_api_key }}"
-          - "logs_routing_tenant_regions: {{ logs_routing_tenant_regions }}"
-    
     - name: Ensure API key and regions are set
       ansible.builtin.fail:
         msg: "The ibmcloud_api_key or logs_routing_tenant_regions environment variable is not set."
@@ -34,15 +28,18 @@
       when: ibmcloud_login_result.rc == 0
 
     - name: Get IAM token for API calls
-      ansible.builtin.shell: |
-        ibmcloud iam oauth-tokens --output JSON | jq -r '.iam_token'
-      register: iam_token_result
+      ansible.builtin.shell: ibmcloud iam oauth-tokens --output JSON
+      register: ibmcloud_token_output
       changed_when: false
-      failed_when: iam_token_result.rc != 0
+      failed_when: ibmcloud_token_output.rc != 0
+
+    - name: Extract and set IAM token
+      set_fact:
+        iam_token_result: "{{ ibmcloud_token_output.stdout | from_json | json_query('iam_token') }}"
 
     - name: Parse regions from environment variable
       set_fact:
-        regions_list: "{{ ('[' + logs_routing_tenant_regions | replace('[', '') | replace(']', '') | replace('\"', '') + ']') | from_yaml }}"
+        regions_list: "{{ logs_routing_tenant_regions | from_yaml }}"
     
     - name: Loop through each region and find log routing tenants
       ansible.builtin.uri:

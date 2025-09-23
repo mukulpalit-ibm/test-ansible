@@ -46,7 +46,7 @@
         url: "https://management.{{ item }}.logs-router.cloud.ibm.com/v1/tenants"
         method: GET
         headers:
-          Authorization: "{{ iam_token_result.stdout }}"
+          Authorization: "{{ iam_token_result }}"
           IBM-API-Version: 2025-08-06
         return_content: true
         validate_certs: true
